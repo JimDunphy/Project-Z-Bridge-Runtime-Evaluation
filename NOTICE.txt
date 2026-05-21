@@ -1,0 +1,24 @@
+Project Z-Bridge Runtime Evaluation Package
+
+Copyright (c) 2026 J Dunphy. All rights reserved.
+
+This delivery is a runtime-only evaluation package. It includes a compiled
+Project Z-Bridge binary and supporting Docker runtime files. It does not include
+Project Z-Bridge Rust source code.
+
+Project Z-Bridge components are provided under the accompanying
+LICENSE.txt evaluation terms. No production, redistribution, resale,
+sublicensing, or product-embedding rights are granted without a separate written
+agreement.
+
+Third-party software notice:
+
+This package and its Docker image may include third-party software, including
+Debian base image packages, CA certificates, Rust libraries, and other
+open-source dependencies. Those components are not relicensed by Project
+Z-Bridge and remain governed by their respective licenses.
+
+Classic Zimbra Web Client assets are not included in this runtime package.
+The initialization script can download or import a zimbra.war and extract those
+assets locally for evaluation. Any ZWC assets obtained that way remain governed
+by their own upstream licenses and trademark terms.

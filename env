@@ -1,0 +1,74 @@
+# Project Z-Bridge runtime evaluation package.
+# Copy this file to .env and edit the CHANGE ME block before running ./build.sh start.
+
+###############################################################################
+# BEGIN CHANGE ME
+###############################################################################
+
+# Required: upstream Stalwart Mail Server URL used by Project Z-Bridge.
+STALWART_BASE_URL=https://stalwart.example.com
+
+# Public HTTPS URL for the bridge when behind nginx/reverse proxy.
+BRIDGE_PUBLIC_BASE_URL=https://bridge.example.com/
+
+# Replace with a long random value so image-proxy URLs survive restarts.
+BRIDGE_IMAGE_PROXY_SECRET=LEopkKgMoB2p8fu4dovSKtWIPGT0whgI9zSntWxghi7CpuMTfcgqnJRyBK4DV7L-
+
+# Dedicated renderer origin used by the iframe renderer.
+BRIDGE_EMAIL_IFRAME_RENDERER_ORIGIN=https://renderer.example.com
+
+# Accounts or domains enabled for iframe renderer/sandbox evaluation.
+BRIDGE_EMAIL_IFRAME_RENDERER_USER_ALLOWLIST=jad@example.com,betsy@example.com
+BRIDGE_EMAIL_IFRAME_SANDBOX_USER_ALLOWLIST=jad@example.com,betsy@example.com
+
+###############################################################################
+# END CHANGE ME
+###############################################################################
+
+# Docker image tag loaded from dist/project-z-bridge-runtime.image.tar.gz or
+# downloaded by ./build.sh update-image.
+BRIDGE_IMAGE=project-z-bridge:runtime-eval
+BRIDGE_CONTAINER_NAME=project-z-bridge-runtime-eval
+
+# Host port mapping. The container listens internally on 7777.
+BRIDGE_LISTEN_ADDR=0.0.0.0
+BRIDGE_PORT=7777
+BRIDGE_TIMEZONE=America/Vancouver
+
+# Cache, push, and search warmup settings used by the evaluation profile.
+BRIDGE_PUSH_WARM_ENABLED=1
+BRIDGE_PUSH_HOT_MAX_QUERIES=4
+BRIDGE_PUSH_PREWARM_LIMIT=100
+BRIDGE_PUSH_PREWARM_MIN_INTERVAL_MS=5000
+BRIDGE_PUSH_NOOP_PREWARM_ENABLED=1
+BRIDGE_PUSH_NOOP_PREWARM_INTERVAL_MS=60000
+BRIDGE_JMAP_INCREMENTAL_MODE=off
+BRIDGE_SEARCH_PREFETCH_NEXT_WINDOW_ENABLED=1
+BRIDGE_SEARCH_PREFETCH_NEXT_WINDOW_LIMIT=4
+BRIDGE_CONV_ABOVE_FOLD_BODY_PREFETCH_ENABLED=1
+BRIDGE_CONV_SCROLL_METADATA_PREFETCH_ENABLED=1
+BRIDGE_CONV_SCROLL_METADATA_PREFETCH_PAGES=3
+BRIDGE_GETMSG_CACHE_SECS=14400
+BRIDGE_SEARCH_CONV_SEED_CACHE_SECS=14400
+
+# Email rendering and browser policy settings.
+BRIDGE_EMAIL_IFRAME_SANDBOX_ENABLED=true
+BRIDGE_EMAIL_IFRAME_SANDBOX_POLICY=allow-same-origin
+BRIDGE_EMAIL_IFRAME_RENDERER_ENABLED=true
+BRIDGE_COOKIE_SECURE=1
+BRIDGE_CSP_MODE=log
+BRIDGE_CSP_REPORT_URI=/zimbra/csp-report
+
+# Optional bridge features enabled for evaluation.
+BRIDGE_DUMPSTER_ENABLED=1
+BRIDGE_AI_ENABLED=1
+BRIDGE_AI_PROVIDERS=codex,claude,gemini
+BRIDGE_AI_CODEX_MODEL=gpt-5.3-codex-spark
+BRIDGE_AI_RUNNER_URL=http://host.docker.internal:8765
+BRIDGE_AI_RUNNER_BIND=0.0.0.0
+BRIDGE_AI_RUNNER_ALLOW_LOCAL_FALLBACK=0
+BRIDGE_FEED_POLL_SECS=60
+BRIDGE_SIEVE_ACTIVATE=1
+
+# Evaluation logging: keep bridge debug enabled, without enabling debug for all dependencies.
+RUST_LOG=zbridge_shim=debug

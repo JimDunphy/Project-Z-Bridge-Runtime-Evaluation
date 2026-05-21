@@ -1,0 +1,19 @@
+services:
+  bridge:
+    image: ${BRIDGE_IMAGE:-project-z-bridge:runtime-eval}
+    container_name: ${BRIDGE_CONTAINER_NAME:-project-z-bridge-runtime-eval}
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BRIDGE_BIND: 0.0.0.0:7777
+      WEBCLIENT_ROOT: /webclient
+      BRIDGE_DATA_DIR: /data
+    volumes:
+      - ./static/zimbra:/webclient:ro
+      - ./data:/data
+    ports:
+      - "${BRIDGE_LISTEN_ADDR:-0.0.0.0}:${BRIDGE_PORT:-7777}:7777"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

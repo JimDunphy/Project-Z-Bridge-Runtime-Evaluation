@@ -1,0 +1,35 @@
+Project Z-Bridge Runtime Evaluation License
+
+Copyright (c) 2026 J Dunphy. All rights reserved.
+
+This runtime package contains proprietary Project Z-Bridge binary components
+provided only for limited technical evaluation.
+
+Permission is granted to the recipient to run this package internally for
+limited technical evaluation, interoperability testing, and proof-of-concept
+work involving Project Z-Bridge.
+
+No other rights are granted. Without a separate written agreement from the
+copyright holder, the recipient may not:
+
+- use this package in production;
+- redistribute, publish, resell, sublicense, or transfer this package;
+- embed this package, or any Project Z-Bridge binary component from this
+  package, in another product or service;
+- provide this package to customers, affiliates, contractors, or third parties;
+- modify, decompile, disassemble, or reverse engineer Project Z-Bridge binary
+  components, except to the extent such restriction is prohibited by applicable
+  law;
+- remove or alter copyright, license, or attribution notices.
+
+This license applies only to Project Z-Bridge components. Third-party software,
+base images, system packages, and open-source dependencies included in or used
+by this package remain subject to their own licenses.
+
+This package is provided "as is", without warranty of any kind, including any
+implied warranties of merchantability, fitness for a particular purpose, title,
+or non-infringement. The copyright holder is not liable for any claim, damages,
+or other liability arising from use of this package.
+
+Any commercial use, production deployment, redistribution, resale, sublicensing,
+or inclusion in another product requires a separate written agreement.

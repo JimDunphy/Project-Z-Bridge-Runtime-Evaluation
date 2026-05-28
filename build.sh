@@ -354,34 +354,37 @@ download_webclient_war() {
   printf '%s\n' "${out_war}"
 }
 
-github_auth_headers() {
+github_auth_token() {
   local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   if [[ -z "${token}" ]] && command -v gh >/dev/null 2>&1; then
     token="$(gh auth token 2>/dev/null || true)"
   fi
-  if [[ -n "${token}" ]]; then
-    printf '%s\n' "-H" "Authorization: Bearer ${token}"
-  fi
+  printf '%s' "${token}"
 }
 
 fetch_release_json() {
   local repo="$1"
   local release="$2"
   local api=""
-  local -a headers=()
+  local token=""
 
-  mapfile -t headers < <(github_auth_headers)
   if [[ -z "${release}" || "${release}" == "latest" ]]; then
     api="https://api.github.com/repos/${repo}/releases/latest"
   else
     api="https://api.github.com/repos/${repo}/releases/tags/${release}"
   fi
 
-  if ! curl -fsSL "${headers[@]}" -H "Accept: application/vnd.github+json" "${api}"; then
+  token="$(github_auth_token)"
+  if [[ -n "${token}" ]]; then
+    curl -fsSL -H "Authorization: Bearer ${token}" -H "Accept: application/vnd.github+json" "${api}" && return 0
+  else
+    curl -fsSL -H "Accept: application/vnd.github+json" "${api}" && return 0
+  fi
+  {
     echo "update-image: failed to fetch GitHub release metadata: ${api}" >&2
     echo "For a private repo, authenticate with GITHUB_TOKEN/GH_TOKEN or gh auth." >&2
     return 1
-  fi
+  }
 }
 
 release_tag_from_json() {
@@ -409,12 +412,18 @@ download_release_asset() {
   local repo="$1"
   local asset_id="$2"
   local dest="$3"
-  local -a headers=()
+  local token=""
 
-  mapfile -t headers < <(github_auth_headers)
-  curl -fL "${headers[@]}" -H "Accept: application/octet-stream" \
-    "https://api.github.com/repos/${repo}/releases/assets/${asset_id}" \
-    -o "${dest}"
+  token="$(github_auth_token)"
+  if [[ -n "${token}" ]]; then
+    curl -fL -H "Authorization: Bearer ${token}" -H "Accept: application/octet-stream" \
+      "https://api.github.com/repos/${repo}/releases/assets/${asset_id}" \
+      -o "${dest}"
+  else
+    curl -fL -H "Accept: application/octet-stream" \
+      "https://api.github.com/repos/${repo}/releases/assets/${asset_id}" \
+      -o "${dest}"
+  fi
 }
 
 verify_downloaded_image() {

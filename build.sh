@@ -27,6 +27,8 @@ Commands:
       Update only the Project Z-Bridge runtime image from a private GitHub
       Release. By default this first runs `git pull --ff-only` when this
       directory is a git checkout, then re-runs the updated script.
+      A bare release tag is also accepted, for example:
+      ./build.sh update-image v0.1.1-eval
 
   start
       Start Project Z-Bridge in Docker.
@@ -645,6 +647,7 @@ case "${cmd}" in
     load_image
     ;;
   update-image)
+    original_update_arg_count=$#
     original_update_args=("$@")
     release="latest"
     repo="${PROJECT_Z_BRIDGE_RELEASE_REPO:-${DEFAULT_RELEASE_REPO}}"
@@ -684,14 +687,26 @@ case "${cmd}" in
           no_git_pull="1"
           shift
           ;;
-        *)
+        -*)
           echo "update-image: unknown argument: $1" >&2
           exit 2
+          ;;
+        *)
+          if [[ "${release}" != "latest" ]]; then
+            echo "update-image: multiple release tags were provided" >&2
+            exit 2
+          fi
+          release="$1"
+          shift
           ;;
       esac
     done
     if [[ "${no_git_pull}" != "1" ]]; then
-      maybe_git_pull_and_reexec update-image "${original_update_args[@]}"
+      if (( original_update_arg_count > 0 )); then
+        maybe_git_pull_and_reexec update-image "${original_update_args[@]}"
+      else
+        maybe_git_pull_and_reexec update-image
+      fi
     fi
     ensure_dirs
     update_image "${release}" "${repo}" "${restart}"

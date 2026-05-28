@@ -107,12 +107,31 @@ Compose versions are not supported by this runtime package.
 Project Z-Bridge runtime binaries are delivered as private GitHub Release
 assets.
 
+For a private GitHub repository, each machine that runs `init` or `update-image`
+must be authenticated for GitHub Release asset downloads. SSH git access is
+enough for `git pull`, but it is not used by GitHub's release download API.
+
+Recommended one-time setup on the runtime host:
+
+```sh
+gh auth login
+```
+
+Token-based authentication also works:
+
+```sh
+GITHUB_TOKEN=<token> ./build.sh update-image --release v0.1.2
+```
+
 Default update:
 
 ```sh
 ./build.sh update-image
 ./build.sh restart
 ```
+
+You do not need to stop the bridge before `update-image`. The running container
+continues using the old image until `./build.sh restart` recreates it.
 
 For a specific release:
 
@@ -121,14 +140,11 @@ For a specific release:
 ./build.sh restart
 ```
 
-For a private GitHub repository, authenticate with a token in the shell:
+To download and restart in one command:
 
 ```sh
-GITHUB_TOKEN=<token> ./build.sh update-image --release v0.1.2
+./build.sh update-image --release v0.1.2 --restart
 ```
-
-An existing `gh auth login` session is also accepted if the GitHub CLI is
-installed.
 
 By default, `update-image` first runs:
 

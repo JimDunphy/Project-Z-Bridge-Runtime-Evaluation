@@ -382,7 +382,9 @@ fetch_release_json() {
   fi
   {
     echo "update-image: failed to fetch GitHub release metadata: ${api}" >&2
-    echo "For a private repo, authenticate with GITHUB_TOKEN/GH_TOKEN or gh auth." >&2
+    echo "For a private repo, GitHub Release asset downloads require GitHub API auth." >&2
+    echo "SSH git access is enough for git pull, but not for the release API." >&2
+    echo "Authenticate with GITHUB_TOKEN/GH_TOKEN or an existing gh auth login session." >&2
     return 1
   }
 }

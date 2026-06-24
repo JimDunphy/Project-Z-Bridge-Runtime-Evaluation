@@ -1,5 +1,5 @@
 Project Z-Bridge runtime evaluation package
-Package version: v0.1.2-eval
-Source commit: acddc2a2c3fa669ef91e4d61faad78e946ad95f7
-Created: 2026-05-29
+Package version: v0.1.3-eval
+Source commit: 60c4fb537cf0f81f5a06d9110390a07aa3ce0997
+Created: 2026-06-24
 Image tag: project-z-bridge:runtime-eval

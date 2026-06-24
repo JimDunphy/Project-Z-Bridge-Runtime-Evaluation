@@ -6,3 +6,5 @@ dist/archive/
 dist/.update-image.*
 dist/SHA256SUMS.latest
 dist/zimbra.war
+__pycache__/
+*.py[cod]

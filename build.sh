@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+INVOKE_DIR="$(pwd -P)"
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 cd "${ROOT_DIR}"
 
@@ -11,6 +12,9 @@ ENV_TEMPLATE="${ROOT_DIR}/env"
 DEFAULT_RELEASE_REPO="JimDunphy/Project-Z-Bridge-Runtime-Evaluation"
 IMAGE_ASSET="project-z-bridge-runtime.image.tar.gz"
 CHECKSUM_ASSET="SHA256SUMS"
+TOOLS_DIR="${ROOT_DIR}/tools"
+AI_RUNNER_TOOL="${TOOLS_DIR}/ai_runner.py"
+COMPAT_TRACE_TOOL="${TOOLS_DIR}/compat_trace_report.py"
 
 usage() {
   cat <<'EOF'
@@ -50,6 +54,27 @@ Commands:
 
   doctor
       Print local runtime diagnostics for support/debugging.
+
+  ai-runner [args...]
+      Run the host-side AI runner in the foreground.
+
+  ai-runner-health
+      Query the host-side AI runner health endpoint.
+
+  compat-trace-show [--tail N] [--foreground|--all] [--hide-values] [--summary-only|--calls-only] [trace.jsonl]
+      Render SOAP/REST compatibility trace for humans.
+
+  compat-trace-follow [--all] [--from-start] [--hide-values] [trace.jsonl]
+      Follow SOAP/REST compatibility trace as a live call feed.
+
+  compat-trace-dump [--tail N] [--method NAME] [--curl] [--base-url URL] [trace.jsonl]
+      Pretty-print full developer trace request/response blocks.
+
+  compat-trace-clear [trace.jsonl]
+      Truncate the compatibility trace file for a clean repro.
+
+  compat-trace-redact [trace.jsonl]
+      Write trace JSONL to stdout with private detail blocks removed.
 
   load-image
       Load dist/project-z-bridge-runtime.image.tar.gz into Docker.
@@ -179,6 +204,220 @@ load_env() {
   fi
   export BRIDGE_IMAGE="${BRIDGE_IMAGE:-project-z-bridge:runtime-eval}"
   export BRIDGE_PORT="${BRIDGE_PORT:-7777}"
+}
+
+require_python_tool() {
+  local path="$1"
+  require_command python3
+  require_file "${path}"
+}
+
+runtime_bridge_running() {
+  local container_id=""
+  compose_supported || return 1
+  [[ -f "${COMPOSE_FILE}" && -f "${ENV_FILE}" ]] || return 1
+  container_id="$(compose_diagnostic ps -q bridge 2>/dev/null | head -n 1 || true)"
+  [[ -n "${container_id}" ]] || return 1
+  [[ "$(docker inspect -f '{{.State.Running}}' "${container_id}" 2>/dev/null || true)" == "true" ]]
+}
+
+ai_runner_runtime_defaults() {
+  export BRIDGE_AI_RUNNER_PORT="${BRIDGE_AI_RUNNER_PORT:-8765}"
+  export BRIDGE_AI_RUNNER_CONTEXT_DIR="${BRIDGE_AI_RUNNER_CONTEXT_DIR:-${ROOT_DIR}/data/ai-runner/context}"
+  export BRIDGE_AI_RUNNER_COMPOSE_SESSION_DIR="${BRIDGE_AI_RUNNER_COMPOSE_SESSION_DIR:-${ROOT_DIR}/data/ai-runner/compose-sessions}"
+}
+
+ai_runner_health_url() {
+  local bind="${BRIDGE_AI_RUNNER_BIND:-127.0.0.1}"
+  local port="${BRIDGE_AI_RUNNER_PORT:-8765}"
+  case "${bind}" in
+    0.0.0.0|::|\[::\])
+      bind="127.0.0.1"
+      ;;
+  esac
+  printf 'http://%s:%s/health\n' "${bind}" "${port}"
+}
+
+compat_trace_host_path() {
+  echo "${ROOT_DIR}/data/compat-trace.jsonl"
+}
+
+compat_trace_env_file_value() {
+  local key="$1"
+  [[ -f "${ENV_FILE}" ]] || return 1
+  awk -F= -v key="${key}" '
+    /^[[:space:]]*#/ { next }
+    $1 == key {
+      value = substr($0, index($0, "=") + 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      print value
+    }
+  ' "${ENV_FILE}" | tail -n 1
+}
+
+compat_trace_to_host_path() {
+  local value="$1"
+  value="${value/#\~/${HOME}}"
+  case "${value}" in
+    /data)
+      echo "${ROOT_DIR}/data"
+      ;;
+    /data/*)
+      echo "${ROOT_DIR}/data/${value#/data/}"
+      ;;
+    /*)
+      echo "${value}"
+      ;;
+    *)
+      echo "${ROOT_DIR}/${value}"
+      ;;
+  esac
+}
+
+compat_trace_configured_host_path() {
+  local value="${BRIDGE_COMPAT_TRACE_PATH:-}"
+  if [[ -z "${value}" ]]; then
+    value="$(compat_trace_env_file_value BRIDGE_COMPAT_TRACE_PATH || true)"
+  fi
+  [[ -n "${value}" ]] || return 1
+  compat_trace_to_host_path "${value}"
+}
+
+compat_trace_args_have_path() {
+  local skip_next=0
+  local arg
+  for arg in "$@"; do
+    if [[ "${skip_next}" -eq 1 ]]; then
+      skip_next=0
+      continue
+    fi
+    case "${arg}" in
+      --source|--tail|--header-every|--method|--base-url)
+        skip_next=1
+        ;;
+      --*)
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+compat_trace_show() {
+  require_python_tool "${COMPAT_TRACE_TOOL}"
+  load_env
+  if compat_trace_args_have_path "$@"; then
+    python3 "${COMPAT_TRACE_TOOL}" "$@"
+    return
+  fi
+
+  local configured_path
+  configured_path="$(compat_trace_configured_host_path || true)"
+  if [[ -n "${configured_path}" && -f "${configured_path}" ]]; then
+    python3 "${COMPAT_TRACE_TOOL}" --source "host file: ${configured_path}" "$@" "${configured_path}"
+    return
+  fi
+
+  local host_path
+  host_path="$(compat_trace_host_path)"
+  if [[ -f "${host_path}" ]]; then
+    python3 "${COMPAT_TRACE_TOOL}" --source "runtime host file: ${host_path}" "$@" "${host_path}"
+    return
+  fi
+
+  if runtime_bridge_running; then
+    if compose exec -T bridge sh -lc 'trace="${BRIDGE_COMPAT_TRACE_PATH:-}"; if [ -z "$trace" ]; then trace="${BRIDGE_DATA_DIR:-/data}/compat-trace.jsonl"; fi; cat "$trace" 2>/dev/null' \
+      | python3 "${COMPAT_TRACE_TOOL}" --source "runtime container" "$@" -; then
+      return
+    fi
+  fi
+
+  echo "build.sh compat-trace-show: compatibility trace not found yet." >&2
+  echo "Enable BRIDGE_COMPAT_TRACE_ENABLED=1, restart the bridge, exercise traffic, then retry." >&2
+  exit 2
+}
+
+compat_trace_follow() {
+  compat_trace_show --follow "$@"
+}
+
+compat_trace_dump() {
+  compat_trace_show --dump-full --tail 0 "$@"
+}
+
+compat_trace_clear_path() {
+  local path="$1"
+  mkdir -p "$(dirname "${path}")"
+  : >"${path}"
+  echo "Cleared compatibility trace: ${path}"
+}
+
+compat_trace_clear() {
+  load_env
+  if [[ $# -gt 1 ]]; then
+    echo "build.sh compat-trace-clear: expected zero or one trace path argument" >&2
+    exit 2
+  fi
+
+  if [[ $# -eq 1 ]]; then
+    local explicit_path="$1"
+    explicit_path="${explicit_path/#\~/${HOME}}"
+    if [[ "${explicit_path}" != /* ]]; then
+      explicit_path="${INVOKE_DIR}/${explicit_path}"
+    fi
+    compat_trace_clear_path "${explicit_path}"
+    return
+  fi
+
+  if runtime_bridge_running; then
+    compose exec -T bridge sh -lc 'trace="${BRIDGE_COMPAT_TRACE_PATH:-}"; if [ -z "$trace" ]; then trace="${BRIDGE_DATA_DIR:-/data}/compat-trace.jsonl"; fi; mkdir -p "$(dirname "$trace")"; : > "$trace"; printf "Cleared compatibility trace: %s\n" "$trace"'
+    return
+  fi
+
+  local configured_path
+  configured_path="$(compat_trace_configured_host_path || true)"
+  if [[ -n "${configured_path}" ]]; then
+    compat_trace_clear_path "${configured_path}"
+    return
+  fi
+
+  compat_trace_clear_path "$(compat_trace_host_path)"
+}
+
+compat_trace_redact() {
+  require_python_tool "${COMPAT_TRACE_TOOL}"
+  load_env
+  if compat_trace_args_have_path "$@"; then
+    python3 "${COMPAT_TRACE_TOOL}" --redact "$@"
+    return
+  fi
+
+  local configured_path
+  configured_path="$(compat_trace_configured_host_path || true)"
+  if [[ -n "${configured_path}" && -f "${configured_path}" ]]; then
+    python3 "${COMPAT_TRACE_TOOL}" --redact "${configured_path}"
+    return
+  fi
+
+  local host_path
+  host_path="$(compat_trace_host_path)"
+  if [[ -f "${host_path}" ]]; then
+    python3 "${COMPAT_TRACE_TOOL}" --redact "${host_path}"
+    return
+  fi
+
+  if runtime_bridge_running; then
+    if compose exec -T bridge sh -lc 'trace="${BRIDGE_COMPAT_TRACE_PATH:-}"; if [ -z "$trace" ]; then trace="${BRIDGE_DATA_DIR:-/data}/compat-trace.jsonl"; fi; cat "$trace" 2>/dev/null' \
+      | python3 "${COMPAT_TRACE_TOOL}" --redact -; then
+      return
+    fi
+  fi
+
+  echo "build.sh compat-trace-redact: compatibility trace not found yet." >&2
+  echo "Enable BRIDGE_COMPAT_TRACE_ENABLED=1, restart the bridge, exercise traffic, then retry." >&2
+  exit 2
 }
 
 ensure_env_file() {
@@ -758,6 +997,46 @@ case "${cmd}" in
       echo "curl not found. Open: ${url}"
     fi
     ;;
+  ai-runner)
+    ensure_dirs
+    load_env
+    ai_runner_runtime_defaults
+    require_python_tool "${AI_RUNNER_TOOL}"
+    python3 "${AI_RUNNER_TOOL}" "$@"
+    ;;
+  ai-runner-health)
+    load_env
+    ai_runner_runtime_defaults
+    url="$(ai_runner_health_url)"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsS "${url}"
+      echo
+    else
+      require_command python3
+      python3 - "${url}" <<'PY'
+import sys
+import urllib.request
+
+with urllib.request.urlopen(sys.argv[1], timeout=5) as resp:
+    print(resp.read().decode("utf-8"))
+PY
+    fi
+    ;;
+  compat-trace-show)
+    compat_trace_show "$@"
+    ;;
+  compat-trace-follow)
+    compat_trace_follow "$@"
+    ;;
+  compat-trace-dump)
+    compat_trace_dump "$@"
+    ;;
+  compat-trace-clear)
+    compat_trace_clear "$@"
+    ;;
+  compat-trace-redact)
+    compat_trace_redact "$@"
+    ;;
   doctor)
     load_env
     echo "Runtime:"
@@ -805,6 +1084,9 @@ case "${cmd}" in
     else
       echo "  static/zimbra/ entries: $(find static/zimbra -maxdepth 1 -mindepth 1 | wc -l)"
     fi
+    echo "  AI runner tool: $([[ -f "${AI_RUNNER_TOOL}" ]] && echo present || echo missing)"
+    echo "  Compat trace tool: $([[ -f "${COMPAT_TRACE_TOOL}" ]] && echo present || echo missing)"
+    echo "  Compat trace path: $(compat_trace_configured_host_path || compat_trace_host_path)"
     echo
     echo "URLs:"
     echo "  Health: http://127.0.0.1:${BRIDGE_PORT}/healthz"

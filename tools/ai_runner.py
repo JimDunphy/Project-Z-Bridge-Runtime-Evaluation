@@ -3,7 +3,7 @@
 Project Z Bridge host AI runner.
 
 Purpose:
-- Execute locally installed provider CLIs (codex/claude/gemini) on the host.
+- Execute locally installed provider CLIs (codex/claude/agy) on the host.
 - Expose a minimal localhost HTTP API for the bridge container.
 - Reuse existing host-side provider authentication/session state.
 
@@ -143,21 +143,21 @@ def normalize_provider(raw: str) -> str:
 
 
 def load_allowed_providers() -> list[str]:
-    raw = os.getenv("BRIDGE_AI_RUNNER_ALLOW_PROVIDERS", "codex,claude,gemini")
+    raw = os.getenv("BRIDGE_AI_RUNNER_ALLOW_PROVIDERS", "codex,claude,agy")
     out: list[str] = []
     seen: set[str] = set()
     for token in raw.split(","):
         provider = normalize_provider(token)
         if not provider:
             continue
-        if provider not in {"codex", "claude", "gemini"}:
+        if provider not in {"codex", "claude", "agy"}:
             continue
         if provider in seen:
             continue
         seen.add(provider)
         out.append(provider)
     if not out:
-        out = ["codex", "claude", "gemini"]
+        out = ["codex", "claude", "agy"]
     return out
 
 
@@ -603,12 +603,14 @@ class ProbeResult:
 
 
 def binary_for_provider(provider: str) -> str:
+    if provider == "agy":
+        return os.getenv("BRIDGE_AI_RUNNER_AGY_BIN", "agy")
     return provider
 
 
 def run_probe(provider: str, timeout_ms: int) -> ProbeResult:
     provider = normalize_provider(provider)
-    if provider not in {"codex", "claude", "gemini"}:
+    if provider not in {"codex", "claude", "agy"}:
         return ProbeResult(
             provider=provider or "",
             binary="",
@@ -696,7 +698,7 @@ def run_plan(
     context_json: str | None = None,
 ) -> str:
     provider = normalize_provider(provider)
-    if provider not in {"codex", "claude", "gemini"}:
+    if provider not in {"codex", "claude", "agy"}:
         raise RuntimeError("unsupported provider")
     if provider not in ALLOWED_PROVIDERS:
         raise RuntimeError("provider is not allowed by runner configuration")
@@ -819,17 +821,7 @@ def run_plan(
             return stdout
 
         proc = subprocess.run(
-            [
-                "gemini",
-                "--output-format",
-                "json",
-                "--skip-trust",
-                "--approval-mode",
-                "plan",
-                "-p",
-                "",
-            ],
-            input=prompt,
+            [binary_for_provider("agy"), "--print", prompt],
             capture_output=True,
             text=True,
             timeout=timeout_ms / 1000.0,
@@ -837,10 +829,10 @@ def run_plan(
             cwd=str(workspace),
         )
         if proc.returncode != 0:
-            raise RuntimeError(provider_process_error("gemini", proc))
+            raise RuntimeError(provider_process_error("agy", proc))
         stdout = (proc.stdout or "").strip()
         if not stdout:
-            raise RuntimeError("gemini returned empty output")
+            raise RuntimeError("agy returned empty output")
         wrapper_text = extract_last_json_object(stdout) or stdout
         try:
             wrapper = json.loads(wrapper_text)
